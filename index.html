@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- APP:BEGIN -->
+<title>Upcoming 行程本</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: boarding-pass "next departure" card on top, then a departures-board style list or a month calendar; trip detail is a day-by-day itinerary. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #18202e;
+  --muted: #5f6b7d;
+  --line: #dde2ea;
+  --accent: #2346c8;
+  --accent-ink: #ffffff;
+  --signal: #f2b01e;
+  --signal-ink: #2a1f00;
+  --ok: #1f8a5b;
+  --warn: #c2410c;
+  --warn-bg: #fff1e8;
+  --chip: #eef1f6;
+  --shadow: 0 1px 2px rgba(24,32,46,.06), 0 6px 20px rgba(24,32,46,.06);
+  --c1: #2346c8; --c2: #0f8a7e; --c3: #d9480f; --c4: #b02a7a; --c5: #6d4fd1; --c6: #a17a00;
+  --f-display: "Bricolage Grotesque", "Noto Sans SC", system-ui, sans-serif;
+  --f-body: "Noto Sans SC", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141d; --surface: #171e2a; --ink: #e7ebf2; --muted: #96a1b3; --line: #273142;
+    --accent: #7c97ff; --accent-ink: #0b1020; --signal: #f5c24a; --signal-ink: #221800;
+    --ok: #4cc38a; --warn: #ff9a5c; --warn-bg: #3a2014; --chip: #212a39;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+    --c1: #7c97ff; --c2: #3cc4b4; --c3: #ff8a4c; --c4: #ec6fb6; --c5: #a68cff; --c6: #e0b43a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141d; --surface: #171e2a; --ink: #e7ebf2; --muted: #96a1b3; --line: #273142;
+  --accent: #7c97ff; --accent-ink: #0b1020; --signal: #f5c24a; --signal-ink: #221800;
+  --ok: #4cc38a; --warn: #ff9a5c; --warn-bg: #3a2014; --chip: #212a39;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+  --c1: #7c97ff; --c2: #3cc4b4; --c3: #ff8a4c; --c4: #ec6fb6; --c5: #a68cff; --c6: #e0b43a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--f-body); -webkit-font-smoothing: antialiased; }
+#app { display: flex; flex-direction: column; gap: 16px; }
+.wrap { max-width: 920px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 64px; display: flex; flex-direction: column; gap: 20px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; line-height: 1.2; }
+
+/* top bar */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 1.6rem; letter-spacing: -.01em; }
+.brand small { color: var(--muted); font-family: var(--f-mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 12px; font-size: .9rem; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--ink); }
+.btn.danger { color: var(--warn); }
+.btn.danger.armed { background: var(--warn); color: #fff; border-color: var(--warn); }
+.sync { font-size: .75rem; color: var(--muted); font-family: var(--f-mono); }
+.sync::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: 1px; }
+.sync.cloud::before { background: var(--ok); }
+
+/* boarding pass hero */
+.pass { display: grid; grid-template-columns: 1fr auto; background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; cursor: pointer; border: 0; text-align: left; padding: 0; width: 100%; }
+.pass-main { padding: 18px 22px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pass-label { font-family: var(--f-mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.pass-dest { font-family: var(--f-display); font-size: clamp(1.8rem, 6vw, 2.8rem); font-weight: 700; line-height: 1.05; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.pass-title { color: var(--muted); }
+.pass-row { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 6px; }
+.pass-row div { display: flex; flex-direction: column; }
+.pass-row span:first-child { font-family: var(--f-mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.pass-row span:last-child { font-family: var(--f-mono); font-weight: 600; font-size: 1rem; }
+.pass-stub { border-left: 2px dashed var(--line); padding: 18px 22px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; min-width: 130px; background: var(--signal); color: var(--signal-ink); position: relative; }
+.pass-stub::before, .pass-stub::after { content: ""; position: absolute; left: -10px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); }
+.pass-stub::before { top: -9px; } .pass-stub::after { bottom: -9px; }
+.pass-stub .t { font-family: var(--f-mono); font-size: .72rem; letter-spacing: .14em; }
+.pass-stub .n { font-family: var(--f-display); font-size: 2.6rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.pass-stub .u { font-size: .85rem; }
+@media (max-width: 540px) { .pass { grid-template-columns: 1fr; } .pass-stub { border-left: 0; border-top: 2px dashed var(--line); flex-direction: row; gap: 10px; min-width: 0; padding: 12px 22px; } .pass-stub::before, .pass-stub::after { display: none; } .pass-stub .n { font-size: 1.8rem; } }
+
+.stats { display: flex; gap: 8px 22px; flex-wrap: wrap; color: var(--muted); font-size: .88rem; }
+.stats b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; }
+
+.banner { background: var(--chip); border-radius: var(--r); padding: 10px 14px; font-size: .88rem; color: var(--muted); display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; background: var(--chip); padding: 4px; border-radius: 10px; width: fit-content; }
+.tabs button { border: 0; background: transparent; padding: 6px 16px; border-radius: 7px; color: var(--muted); font-size: .9rem; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-weight: 500; }
+
+/* board list */
+.board { display: flex; flex-direction: column; gap: 6px; }
+.month-h { font-family: var(--f-mono); font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 14px 4px 4px; }
+.row { display: grid; grid-template-columns: 6px 118px 1fr auto; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px 12px 0; text-align: left; width: 100%; overflow: hidden; }
+.row:hover { border-color: var(--muted); }
+.row .bar { align-self: stretch; margin-block: -12px; background: var(--tc); }
+.row .dates { font-family: var(--f-mono); font-size: .88rem; font-weight: 500; line-height: 1.35; }
+.row .dates small { display: block; color: var(--muted); font-weight: 400; font-size: .75rem; }
+.row .info { min-width: 0; }
+.row .info strong { display: block; font-weight: 500; overflow-wrap: anywhere; }
+.row .info span { color: var(--muted); font-size: .85rem; }
+.row.past { opacity: .62; }
+.pill { font-family: var(--f-mono); font-size: .75rem; padding: 3px 9px; border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+.pill.now { background: var(--ok); color: #fff; }
+.pill.soon { background: var(--signal); color: var(--signal-ink); }
+.warnchip { display: inline-block; margin-top: 4px; font-size: .75rem; color: var(--warn); background: var(--warn-bg); padding: 1px 8px; border-radius: 6px; }
+.gap { font-family: var(--f-mono); font-size: .72rem; color: var(--muted); text-align: center; letter-spacing: .06em; padding: 2px 0; }
+@media (max-width: 540px) { .row { grid-template-columns: 6px 1fr auto; } .row .dates { grid-column: 2; } .row .info { grid-column: 2 / 4; grid-row: 2; } .row .pill { grid-column: 3; grid-row: 1; } }
+
+.empty { text-align: center; color: var(--muted); padding: 40px 16px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); display: flex; flex-direction: column; gap: 12px; align-items: center; }
+
+/* calendar */
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cal-head h2 { font-size: 1.3rem; }
+.cal-wrap { overflow-x: auto; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(44px, 1fr)); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--line); gap: 1px; min-width: 320px; }
+.cal .dow { background: var(--chip); font-family: var(--f-mono); font-size: .7rem; text-align: center; padding: 6px 0; color: var(--muted); letter-spacing: .08em; }
+.cal .day { background: var(--surface); min-height: 86px; padding: 4px 0 6px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-width: 0; border: 0; text-align: left; }
+.cal .day:hover { background: var(--chip); }
+.cal .day.other { opacity: .45; }
+.cal .num { font-family: var(--f-mono); font-size: .78rem; padding: 0 6px; color: var(--muted); }
+.cal .day.today .num { color: var(--accent-ink); background: var(--accent); border-radius: 999px; width: fit-content; margin-left: 4px; padding: 0 6px; font-weight: 600; }
+.cal .seg { background: var(--tc); color: #fff; font-size: .72rem; line-height: 1.5; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.5em; }
+.cal .seg.s { margin-left: 4px; border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+.cal .seg.e { margin-right: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+@media (max-width: 540px) { .cal .day { min-height: 64px; } .cal .seg { font-size: .62rem; padding: 0 3px; } }
+
+/* detail */
+.detail { display: flex; flex-direction: column; gap: 18px; }
+.d-head { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); padding: 18px 22px; display: flex; flex-direction: column; gap: 8px; border-top: 6px solid var(--tc); }
+.d-head h2 { font-size: clamp(1.5rem, 5vw, 2.2rem); letter-spacing: -.01em; overflow-wrap: anywhere; }
+.d-meta { display: flex; gap: 8px 18px; flex-wrap: wrap; color: var(--muted); font-size: .9rem; align-items: center; }
+.d-notes { white-space: pre-wrap; color: var(--ink); background: var(--chip); padding: 10px 12px; border-radius: 8px; font-size: .9rem; overflow-wrap: anywhere; }
+.d-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.days { display: flex; flex-direction: column; gap: 14px; }
+.dayblock { display: grid; grid-template-columns: 74px 1fr; gap: 14px; }
+.dayblock .lab { font-family: var(--f-mono); text-align: right; padding-top: 2px; }
+.dayblock .lab b { display: block; font-size: 1.05rem; }
+.dayblock .lab span { font-size: .72rem; color: var(--muted); letter-spacing: .06em; }
+.dayblock .list { border-left: 2px solid var(--line); padding-left: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dayblock.today .list { border-left-color: var(--accent); }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: grid; grid-template-columns: 52px 44px 1fr auto; gap: 10px; align-items: start; }
+.item .tm { font-family: var(--f-mono); font-size: .85rem; padding-top: 1px; }
+.code { font-family: var(--f-mono); font-size: .66rem; font-weight: 600; letter-spacing: .06em; padding: 2px 0; border-radius: 4px; background: var(--chip); text-align: center; margin-top: 2px; }
+.item .body { min-width: 0; }
+.item .body strong { font-weight: 500; overflow-wrap: anywhere; }
+.item .body a, .item .body p { display: block; font-size: .82rem; color: var(--muted); margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.item .body a { color: var(--accent); text-decoration: none; }
+.item .body a:hover { text-decoration: underline; }
+.addline { border: 1px dashed var(--line); background: transparent; border-radius: 8px; padding: 6px 10px; color: var(--muted); font-size: .85rem; text-align: left; }
+.addline:hover { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 540px) { .dayblock { grid-template-columns: 1fr; gap: 6px; } .dayblock .lab { text-align: left; display: flex; gap: 8px; align-items: baseline; } .item { grid-template-columns: 46px 1fr auto; } .item .code { grid-column: 1; grid-row: 2; } .item .body { grid-row: 1 / 3; grid-column: 2; } }
+
+/* dialog */
+dialog { border: 0; border-radius: 14px; padding: 0; background: var(--surface); color: var(--ink); width: min(480px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+dialog::backdrop { background: rgba(10,15,25,.45); }
+dialog form { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+dialog h3 { font-size: 1.2rem; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: .8rem; color: var(--muted); }
+.field input, .field select, .field textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0; }
+.field textarea { min-height: 70px; resize: vertical; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatches label { position: relative; }
+.swatches input { position: absolute; opacity: 0; }
+.swatches span { display: block; width: 28px; height: 28px; border-radius: 50%; background: var(--sw); border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+.swatches input:checked + span { box-shadow: 0 0 0 2px var(--ink); }
+.swatches input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.err { color: var(--warn); font-size: .85rem; min-height: 1.2em; margin: 0; }
+.dlg-actions { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+.dlg-actions div { display: flex; gap: 8px; }
+
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: .88rem; box-shadow: var(--shadow); z-index: 10; max-width: calc(100vw - 32px); }
+@media (prefers-reduced-motion: no-preference) { .row, .pass, .item { transition: border-color .15s, transform .15s; } .pass:hover { transform: translateY(-1px); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><h1>Upcoming</h1><small>行程本</small></div>
+    <div class="actions">
+      <span class="sync" id="sync">本机保存</span>
+      <button class="btn ghost" id="btn-more" type="button">导入 / 导出</button>
+      <button class="btn primary" id="btn-new" type="button">＋ 新建行程</button>
+    </div>
+  </header>
+  <main id="app"></main>
+</div>
+
+<dialog id="dlg-trip">
+  <form id="form-trip" novalidate>
+    <h3 id="trip-dlg-title">新建行程</h3>
+    <div class="field"><label for="t-dest">目的地</label><input id="t-dest" required placeholder="例如：东京"></div>
+    <div class="field"><label for="t-title">行程名称（可选）</label><input id="t-title" placeholder="例如：赏枫 + 看展"></div>
+    <div class="two">
+      <div class="field"><label for="t-start">出发日期</label><input id="t-start" type="date" required></div>
+      <div class="field"><label for="t-end">返回日期</label><input id="t-end" type="date" required></div>
+    </div>
+    <div class="field"><label>颜色</label><div class="swatches" id="t-colors"></div></div>
+    <div class="field"><label for="t-notes">备注</label><textarea id="t-notes" placeholder="签证、同行人、预算……"></textarea></div>
+    <p class="err" id="t-err"></p>
+    <div class="dlg-actions"><span></span><div><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="submit">保存</button></div></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-item">
+  <form id="form-item" novalidate>
+    <h3 id="item-dlg-title">添加安排</h3>
+    <div class="two">
+      <div class="field"><label for="i-date">日期</label><input id="i-date" type="date" required></div>
+      <div class="field"><label for="i-time">时间（可选）</label><input id="i-time" type="time"></div>
+    </div>
+    <div class="field"><label for="i-type">类型</label><select id="i-type"></select></div>
+    <div class="field"><label for="i-title">内容</label><input id="i-title" required placeholder="例如：CA925 北京 → 东京"></div>
+    <div class="field"><label for="i-place">地点（可选，可打开地图）</label><input id="i-place" placeholder="例如：成田机场 T1"></div>
+    <div class="field"><label for="i-notes">备注（订单号、注意事项）</label><textarea id="i-notes"></textarea></div>
+    <p class="err" id="i-err"></p>
+    <div class="dlg-actions"><button class="btn danger" type="button" id="i-del" hidden>删除</button><div><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="submit">保存</button></div></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-io">
+  <form method="dialog">
+    <h3>导入 / 导出</h3>
+    <p style="margin:0;color:var(--muted);font-size:.9rem">导出 .ics 可以导入 Google 日历、Apple 日历或 Outlook。JSON 用于备份和换设备。</p>
+    <button class="btn" type="button" id="io-ics">导出全部行程到日历（.ics）</button>
+    <button class="btn" type="button" id="io-json">导出备份（.json）</button>
+    <label class="btn" for="io-file" style="cursor:pointer">从备份导入（.json）</label>
+    <input type="file" id="io-file" accept=".json,application/json" hidden>
+    <div class="dlg-actions"><span></span><button class="btn" value="close">关闭</button></div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  // ---------- constants ----------
+  const KEY = 'upcoming.trips.v1';
+  const COLORS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
+  const TYPES = [
+    ['flight', 'FLT', '航班'], ['train', 'TRN', '火车 / 交通'], ['hotel', 'HTL', '住宿'],
+    ['activity', 'ACT', '活动 / 景点'], ['food', 'EAT', '餐厅'], ['other', 'ETC', '其他'],
+  ];
+  const TYPE = Object.fromEntries(TYPES.map(([k, c, n]) => [k, { code: c, name: n }]));
+  const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // ---------- dates (all as local YYYY-MM-DD strings) ----------
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return fmt(d); };
+  const diff = (a, b) => Math.round((parse(b) - parse(a)) / 864e5); // b - a in days
+  const today = () => fmt(new Date());
+  const md = s => { const d = parse(s); return `${d.getMonth() + 1}月${d.getDate()}日`; };
+  const dot = s => { const d = parse(s); return `${pad(d.getMonth() + 1)}.${pad(d.getDate())}`; };
+  const wk = s => '周' + WEEK[parse(s).getDay()];
+  const span = t => diff(t.start, t.end) + 1;
+
+  function status(t, now = today()) {
+    if (t.end < now) return { k: 'past', label: '已结束' };
+    if (t.start <= now) return { k: 'now', label: `第 ${diff(t.start, now) + 1}/${span(t)} 天` };
+    const n = diff(now, t.start);
+    return { k: n <= 14 ? 'soon' : 'later', label: n === 1 ? '明天出发' : `${n} 天后` };
+  }
+  const overlaps = (t, all) => all.filter(o => o.id !== t.id && o.start <= t.end && t.start <= o.end);
+
+  // ---------- examples (shown only while you have no trips; never saved) ----------
+  function examples() {
+    const n = today();
+    const mk = (id, dest, title, s, len, color, notes, items) => ({
+      id, dest, title, start: addDays(n, s), end: addDays(n, s + len - 1), color, notes, example: true,
+      items: items.map(([d, time, type, t, place, no], i) => ({ id: id + i, date: addDays(n, s + d), time, type, title: t, place, notes: no || '' })),
+    });
+    return [
+      mk('ex1', '东京', '赏枫 + 看展', 12, 6, 'c3', '护照有效期 OK；带转换插头', [
+        [0, '08:40', 'flight', 'CA925 北京首都 → 东京成田', '成田国际机场 T1', '订单号 E7K2Q9'],
+        [0, '15:00', 'hotel', '入住 新宿 Hotel Gracery', '新宿区歌舞伎町1-19-1', '共 5 晚'],
+        [1, '10:00', 'activity', '森美术馆', '六本木新城'],
+        [2, '', 'activity', '日光一日游', '日光东照宫'],
+        [5, '18:20', 'flight', 'CA926 东京成田 → 北京首都', '成田国际机场 T1'],
+      ]),
+      mk('ex2', '成都', '朋友婚礼', 34, 3, 'c2', '', [
+        [0, '09:15', 'train', 'G89 北京西 → 成都东', '北京西站'],
+        [1, '11:30', 'food', '婚宴', '成都某酒店'],
+      ]),
+      mk('ex3', '冰岛', '追极光', 80, 9, 'c5', '租车需国际驾照翻译件', []),
+    ];
+  }
+
+  // ---------- storage: browser always; account sync when the page runs as a Claude artifact ----------
+  const store = {
+    trips: [], col: null, cloud: false,
+    loadLocal() { try { const v = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(v) ? v : []; } catch { return []; } },
+    saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(this.trips)); } catch {} },
+    async put(trip) {
+      trip.updatedAt = Date.now();
+      const i = this.trips.findIndex(t => t.id === trip.id);
+      if (i >= 0) this.trips[i] = trip; else this.trips.push(trip);
+      this.saveLocal(); render();
+      if (this.col) { try { await this.col.doc(trip.id).set(trip); } catch (e) { toast('同步失败，已保存在本机：' + (e?.message || e?.code || '')); } }
+    },
+    async remove(id) {
+      this.trips = this.trips.filter(t => t.id !== id);
+      this.saveLocal(); render();
+      if (this.col) { try { await this.col.doc(id).delete(); } catch { toast('同步删除失败'); } }
+    },
+    async connect() {
+      if (!window.claude?.use) return;
+      try {
+        const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+        if (!db || !user) return;
+        const id = await user.id();
+        if (!id) return;
+        const col = db.collection('data/users/' + id);
+        const snap = await col.get();
+        if (snap.empty && this.trips.length) {
+          for (const t of this.trips) await col.doc(t.id).set(t);
+        }
+        this.col = col; this.cloud = true;
+        col.onSnapshot(s => {
+          this.trips = s.docs.map(d => d.data()).filter(t => t && t.id);
+          this.saveLocal(); render();
+        }, () => { this.cloud = false; render(); });
+        render();
+      } catch { /* stay on browser storage */ }
+    },
+  };
+
+  // ---------- UI state ----------
+  const ui = { view: 'list', tripId: null, showPast: false, month: today().slice(0, 7) };
+  const app = $('#app');
+
+  function visibleTrips() {
+    const real = store.trips;
+    return { list: (real.length ? real : examples()).slice().sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end)), demo: !real.length };
+  }
+  const findTrip = id => visibleTrips().list.find(t => t.id === id);
+  const label = t => t.title ? `${t.dest} · ${t.title}` : t.dest;
+
+  function render() {
+    const s = $('#sync');
+    s.textContent = store.cloud ? '已同步到账户' : '本机保存';
+    s.classList.toggle('cloud', store.cloud);
+    if (ui.view === 'trip') { const t = findTrip(ui.tripId); if (t) return renderTrip(t); ui.view = 'list'; }
+    renderHome();
+  }
+
+  function renderHome() {
+    const { list, demo } = visibleTrips();
+    const now = today();
+    const upcoming = list.filter(t => t.end >= now);
+    const next = upcoming[0];
+    const year = now.slice(0, 4);
+    const thisYear = list.filter(t => t.start.slice(0, 4) === year || t.end.slice(0, 4) === year);
+    const daysAway = thisYear.reduce((a, t) => {
+      const s = t.start.slice(0, 4) < year ? `${year}-01-01` : t.start, e = t.end.slice(0, 4) > year ? `${year}-12-31` : t.end;
+      return a + diff(s, e) + 1;
+    }, 0);
+
+    let h = '';
+    if (demo) h += `<div class="banner"><span>下面是示例行程，帮你看看效果。新建第一个行程后，示例会自动消失。</span><button class="btn primary" type="button" data-act="new">＋ 新建我的行程</button></div>`;
+    if (next) {
+      const st = status(next, now);
+      const big = st.k === 'now' ? `${diff(next.start, now) + 1}` : `${diff(now, next.start)}`;
+      h += `<button class="pass" type="button" data-trip="${esc(next.id)}" style="--tc:var(--${esc(next.color)})">
+        <div class="pass-main">
+          <span class="pass-label">${st.k === 'now' ? '正在旅行' : '下一站'}${next.example ? ' · 示例' : ''}</span>
+          <span class="pass-dest">${esc(next.dest)}</span>
+          ${next.title ? `<span class="pass-title">${esc(next.title)}</span>` : ''}
+          <div class="pass-row">
+            <div><span>出发 DEP</span><span>${dot(next.start)} ${wk(next.start)}</span></div>
+            <div><span>返回 RET</span><span>${dot(next.end)} ${wk(next.end)}</span></div>
+            <div><span>天数 DAYS</span><span>${span(next)}</span></div>
+            <div><span>安排 ITEMS</span><span>${next.items.length}</span></div>
+          </div>
+        </div>
+        <div class="pass-stub"><span class="t">${st.k === 'now' ? 'DAY' : 'T-MINUS'}</span><span class="n">${big}</span><span class="u">${st.k === 'now' ? `/ ${span(next)} 天` : '天'}</span></div>
+      </button>`;
+    }
+    h += `<div class="stats"><span>${year} 年 <b>${thisYear.length}</b> 次旅行</span><span>共 <b>${daysAway}</b> 天在路上</span><span>待出发 <b>${upcoming.filter(t => t.start > now).length}</b> 个</span></div>`;
+    h += `<div class="tabs" role="tablist"><button role="tab" type="button" data-tab="list" aria-selected="${ui.view === 'list'}">时间线</button><button role="tab" type="button" data-tab="cal" aria-selected="${ui.view === 'cal'}">日历</button></div>`;
+    h += ui.view === 'cal' ? calendarHTML(list) : boardHTML(list, now);
+    app.innerHTML = h;
+  }
+
+  function boardHTML(list, now) {
+    const up = list.filter(t => t.end >= now), past = list.filter(t => t.end < now).reverse();
+    if (!list.length) return '';
+    let h = '<div class="board">', lastMonth = '', prev = null;
+    if (!up.length) h += `<div class="empty"><span>没有待出发的行程。下一次去哪？</span><button class="btn primary" type="button" data-act="new">＋ 新建行程</button></div>`;
+    for (const t of up) {
+      const m = t.start.slice(0, 7);
+      if (m !== lastMonth) { h += `<div class="month-h">${m.slice(0, 4)} 年 ${+m.slice(5)} 月</div>`; lastMonth = m; }
+      else if (prev) { const g = diff(prev.end, t.start) - 1; if (g > 0) h += `<div class="gap">· 间隔 ${g} 天 ·</div>`; }
+      h += rowHTML(t, list, now);
+      prev = t;
+    }
+    if (past.length) {
+      h += `<button class="btn ghost" type="button" data-act="past" style="align-self:flex-start;margin-top:10px">${ui.showPast ? '▾' : '▸'} 已结束的行程（${past.length}）</button>`;
+      if (ui.showPast) h += past.map(t => rowHTML(t, list, now)).join('');
+    }
+    return h + '</div>';
+  }
+
+  function rowHTML(t, list, now) {
+    const st = status(t, now), ov = overlaps(t, list);
+    return `<button class="row ${st.k === 'past' ? 'past' : ''}" type="button" data-trip="${esc(t.id)}" style="--tc:var(--${esc(t.color)})">
+      <span class="bar"></span>
+      <span class="dates">${dot(t.start)} → ${dot(t.end)}<small>${wk(t.start)} · ${span(t)} 天</small></span>
+      <span class="info"><strong>${esc(t.dest)}${t.example ? ' <span class="pill">示例</span>' : ''}</strong><span>${esc(t.title || '')}${t.items.length ? `${t.title ? ' · ' : ''}${t.items.length} 项安排` : ''}</span>
+        ${ov.length ? `<span class="warnchip">⚠ 与「${esc(ov.map(o => o.dest).join('、'))}」日期重叠</span>` : ''}</span>
+      <span class="pill ${st.k}">${st.label}</span>
+    </button>`;
+  }
+
+  function calendarHTML(list) {
+    const [y, m] = ui.month.split('-').map(Number);
+    const first = new Date(y, m - 1, 1);
+    const lead = (first.getDay() + 6) % 7; // Monday first
+    const startDay = addDays(fmt(first), -lead);
+    const now = today();
+    let h = `<div class="cal-head"><h2>${y} 年 ${m} 月</h2><div class="actions">
+      <button class="btn" type="button" data-cal="-1" aria-label="上个月">‹</button>
+      <button class="btn" type="button" data-cal="0">今天</button>
+      <button class="btn" type="button" data-cal="1" aria-label="下个月">›</button></div></div>
+      <div class="cal-wrap"><div class="cal">${['一', '二', '三', '四', '五', '六', '日'].map(d => `<div class="dow">${d}</div>`).join('')}`;
+    for (let i = 0; i < 42; i++) {
+      const d = addDays(startDay, i);
+      if (i >= 35 && d.slice(0, 7) !== ui.month) break;
+      const on = list.filter(t => t.start <= d && d <= t.end);
+      const monday = i % 7 === 0, sunday = i % 7 === 6;
+      h += `<div class="day ${d.slice(0, 7) !== ui.month ? 'other' : ''} ${d === now ? 'today' : ''}" role="button" tabindex="0" data-day="${d}" aria-label="${md(d)}">
+        <span class="num">${+d.slice(8)}</span>
+        ${on.map(t => {
+          const s = d === t.start || monday, e = d === t.end || sunday;
+          return `<span class="seg ${d === t.start ? 's' : ''} ${d === t.end ? 'e' : ''}" data-trip="${esc(t.id)}" style="--tc:var(--${esc(t.color)})" title="${esc(label(t))}">${s ? esc(t.dest) : '&nbsp;'}</span>`;
+        }).join('')}
+      </div>`;
+    }
+    return h + '</div></div><p style="margin:0;color:var(--muted);font-size:.85rem">点击空白日期可以从这一天开始新建行程。</p>';
+  }
+
+  function renderTrip(t) {
+    const now = today(), st = status(t, now), ov = overlaps(t, visibleTrips().list);
+    const days = [];
+    for (let d = t.start; d <= t.end; d = addDays(d, 1)) days.push(d);
+    const byDay = d => t.items.filter(i => i.date === d).sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+    const outside = t.items.filter(i => i.date < t.start || i.date > t.end).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+    const itemHTML = i => `<div class="item">
+        <span class="tm">${esc(i.time || '全天')}</span>
+        <span class="code" title="${esc(TYPE[i.type]?.name || '')}">${TYPE[i.type]?.code || 'ETC'}</span>
+        <div class="body"><strong>${esc(i.title)}</strong>
+          ${i.place ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.place)}" target="_blank" rel="noopener">${esc(i.place)} ↗</a>` : ''}
+          ${i.notes ? `<p>${esc(i.notes)}</p>` : ''}</div>
+        ${t.example ? '<span></span>' : `<button class="btn ghost" type="button" data-edit-item="${esc(i.id)}" aria-label="编辑">编辑</button>`}
+      </div>`;
+    let h = `<div class="detail"><div><button class="btn ghost" type="button" data-act="back">← 返回</button></div>
+      <section class="d-head" style="--tc:var(--${esc(t.color)})">
+        <span class="pass-label">${t.example ? '示例行程' : '行程'}</span>
+        <h2>${esc(t.dest)}${t.title ? ` <span style="color:var(--muted);font-weight:500">· ${esc(t.title)}</span>` : ''}</h2>
+        <div class="d-meta"><span class="mono">${md(t.start)} ${wk(t.start)} → ${md(t.end)} ${wk(t.end)}</span><span>${span(t)} 天</span><span class="pill ${st.k}">${st.label}</span></div>
+        ${ov.length ? `<span class="warnchip">⚠ 与「${esc(ov.map(label).join('、'))}」日期重叠</span>` : ''}
+        ${t.notes ? `<div class="d-notes">${esc(t.notes)}</div>` : ''}
+        <div class="d-actions">${t.example
+          ? `<button class="btn primary" type="button" data-act="new">＋ 新建我的行程</button>`
+          : `<button class="btn" type="button" data-act="edit-trip">编辑行程</button>
+             <button class="btn" type="button" data-act="ics-trip">导出到日历</button>
+             <button class="btn danger" type="button" data-act="del-trip">删除</button>`}</div>
+      </section><div class="days">`;
+    days.forEach((d, n) => {
+      const items = byDay(d);
+      h += `<div class="dayblock ${d === now ? 'today' : ''}"><div class="lab"><b>D${n + 1}</b><span>${dot(d)} ${wk(d)}</span></div><div class="list">
+        ${items.map(itemHTML).join('')}
+        ${t.example ? (items.length ? '' : '<span style="color:var(--muted);font-size:.85rem">自由活动</span>') : `<button class="addline" type="button" data-add-item="${d}">＋ 添加安排</button>`}
+      </div></div>`;
+    });
+    if (outside.length) h += `<div class="dayblock"><div class="lab"><b>其他</b><span>行程日期外</span></div><div class="list">${outside.map(i => itemHTML(i).replace('<strong>', `<strong><span class="mono" style="color:var(--muted)">${dot(i.date)}</span> `)).join('')}</div></div>`;
+    app.innerHTML = h + '</div></div>';
+  }
+
+  // ---------- dialogs ----------
+  const dTrip = $('#dlg-trip'), dItem = $('#dlg-item'), dIO = $('#dlg-io');
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+  $('#t-colors').innerHTML = COLORS.map((c, i) => `<label><input type="radio" name="tcolor" value="${c}" id="tc-${c}" ${i === 0 ? 'checked' : ''}><span style="--sw:var(--${c})"></span></label>`).join('');
+  $('#i-type').innerHTML = TYPES.map(([k, c, n]) => `<option value="${k}">${c} · ${n}</option>`).join('');
+  let editingTrip = null, editingItem = null;
+
+  function openTrip(t, startDate) {
+    editingTrip = t || null;
+    $('#trip-dlg-title').textContent = t ? '编辑行程' : '新建行程';
+    $('#t-dest').value = t?.dest || '';
+    $('#t-title').value = t?.title || '';
+    const s = t?.start || startDate || addDays(today(), 7);
+    $('#t-start').value = s;
+    $('#t-end').value = t?.end || addDays(s, 2);
+    const color = t?.color || COLORS[store.trips.length % COLORS.length];
+    $('#tc-' + color).checked = true;
+    $('#t-notes').value = t?.notes || '';
+    $('#t-err').textContent = '';
+    dTrip.showModal(); $('#t-dest').focus();
+  }
+  $('#t-start').addEventListener('change', e => { if ($('#t-end').value < e.target.value) $('#t-end').value = e.target.value; });
+  $('#form-trip').addEventListener('submit', async e => {
+    e.preventDefault();
+    const dest = $('#t-dest').value.trim(), start = $('#t-start').value, end = $('#t-end').value;
+    if (!dest) return $('#t-err').textContent = '请填写目的地。';
+    if (!start || !end) return $('#t-err').textContent = '请选择出发和返回日期。';
+    if (end < start) return $('#t-err').textContent = '返回日期不能早于出发日期。';
+    const t = editingTrip ? { ...editingTrip } : { id: uid('t'), items: [] };
+    Object.assign(t, { dest, title: $('#t-title').value.trim(), start, end, color: document.querySelector('input[name="tcolor"]:checked')?.value || 'c1', notes: $('#t-notes').value.trim() });
+    dTrip.close();
+    ui.view = 'trip'; ui.tripId = t.id;
+    await store.put(t);
+    toast(editingTrip ? '已保存' : '已创建行程');
+  });
+
+  function openItem(t, date, item) {
+    editingItem = item || null;
+    $('#item-dlg-title').textContent = item ? '编辑安排' : '添加安排';
+    $('#i-date').value = item?.date || date;
+    $('#i-time').value = item?.time || '';
+    $('#i-type').value = item?.type || 'activity';
+    $('#i-title').value = item?.title || '';
+    $('#i-place').value = item?.place || '';
+    $('#i-notes').value = item?.notes || '';
+    $('#i-err').textContent = '';
+    const del = $('#i-del'); del.hidden = !item; disarm(del, '删除');
+    dItem.showModal(); $('#i-title').focus();
+  }
+  $('#form-item').addEventListener('submit', async e => {
+    e.preventDefault();
+    const t = findTrip(ui.tripId); if (!t) return dItem.close();
+    const title = $('#i-title').value.trim(), date = $('#i-date').value;
+    if (!title) return $('#i-err').textContent = '请填写内容。';
+    if (!date) return $('#i-err').textContent = '请选择日期。';
+    const it = { id: editingItem?.id || uid('i'), date, time: $('#i-time').value, type: $('#i-type').value, title, place: $('#i-place').value.trim(), notes: $('#i-notes').value.trim() };
+    const items = t.items.filter(i => i.id !== it.id).concat(it);
+    dItem.close();
+    await store.put({ ...t, items });
+  });
+  $('#i-del').addEventListener('click', async e => {
+    if (!armed(e.currentTarget, '确认删除？')) return;
+    const t = findTrip(ui.tripId);
+    dItem.close();
+    if (t && editingItem) await store.put({ ...t, items: t.items.filter(i => i.id !== editingItem.id) });
+  });
+
+  // two-step confirm (no confirm() dialogs)
+  function armed(btn, text) {
+    if (btn.classList.contains('armed')) return true;
+    btn.dataset.orig = btn.textContent; btn.textContent = text; btn.classList.add('armed');
+    setTimeout(() => disarm(btn), 3000);
+    return false;
+  }
+  function disarm(btn, text) { btn.classList.remove('armed'); if (text || btn.dataset.orig) btn.textContent = text || btn.dataset.orig; }
+
+  // ---------- export / import ----------
+  async function saveFile(filename, text, mime) {
+    try {
+      const dl = await window.claude?.use?.('downloads');
+      if (dl) { await dl.save({ filename, data: new Blob([text], { type: mime }) }); return toast('已导出 ' + filename); }
+    } catch (e) { if (e?.code === 'declined') return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+    a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  function ics(trips) {
+    const e = s => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, m => '\\' + m);
+    const d8 = s => s.replace(/-/g, '');
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Upcoming//Trips//ZH', 'CALSCALE:GREGORIAN'];
+    for (const t of trips) {
+      L.push('BEGIN:VEVENT', `UID:${t.id}@upcoming`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d8(t.start)}`, `DTEND;VALUE=DATE:${d8(addDays(t.end, 1))}`, `SUMMARY:${e('✈ ' + label(t))}`, `DESCRIPTION:${e(t.notes)}`, 'END:VEVENT');
+      for (const i of t.items) {
+        const name = `[${TYPE[i.type]?.name || ''}] ${i.title}`;
+        L.push('BEGIN:VEVENT', `UID:${i.id}@upcoming`, `DTSTAMP:${stamp}`);
+        if (i.time) { const s = d8(i.date) + 'T' + i.time.replace(':', '') + '00'; L.push(`DTSTART:${s}`, `DURATION:PT1H`); }
+        else L.push(`DTSTART;VALUE=DATE:${d8(i.date)}`, `DTEND;VALUE=DATE:${d8(addDays(i.date, 1))}`);
+        L.push(`SUMMARY:${e(name)}`, `LOCATION:${e(i.place)}`, `DESCRIPTION:${e(i.notes)}`, 'END:VEVENT');
+      }
+    }
+    L.push('END:VCALENDAR');
+    return L.join('\r\n');
+  }
+  $('#io-ics').addEventListener('click', () => store.trips.length ? saveFile('upcoming-trips.ics', ics(store.trips), 'text/calendar') : toast('还没有行程可以导出'));
+  $('#io-json').addEventListener('click', () => saveFile(`upcoming-backup-${today()}.json`, JSON.stringify({ version: 1, trips: store.trips }, null, 2), 'application/json'));
+  $('#io-file').addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      const trips = (Array.isArray(data) ? data : data.trips || []).filter(t => t && t.id && t.dest && t.start && t.end);
+      if (!trips.length) return toast('文件里没有找到行程');
+      for (const t of trips) await store.put({ ...t, items: Array.isArray(t.items) ? t.items : [], example: undefined });
+      dIO.close(); toast(`已导入 ${trips.length} 个行程`);
+    } catch { toast('无法读取这个文件，请选择从这里导出的 .json 备份'); }
+  });
+
+  // ---------- events ----------
+  $('#btn-new').addEventListener('click', () => openTrip());
+  $('#btn-more').addEventListener('click', () => dIO.showModal());
+  app.addEventListener('click', async e => {
+    const el = e.target.closest('[data-trip],[data-tab],[data-act],[data-cal],[data-day],[data-add-item],[data-edit-item]');
+    if (!el) return;
+    const d = el.dataset;
+    if (d.trip) { ui.view = 'trip'; ui.tripId = d.trip; render(); window.scrollTo(0, 0); return; }
+    if (d.tab) { ui.view = d.tab; render(); return; }
+    if (d.cal) { if (d.cal === '0') ui.month = today().slice(0, 7); else { const [y, m] = ui.month.split('-').map(Number); ui.month = fmt(new Date(y, m - 1 + +d.cal, 1)).slice(0, 7); } render(); return; }
+    if (d.day) { openTrip(null, d.day); return; }
+    const t = findTrip(ui.tripId);
+    if (d.addItem && t) return openItem(t, d.addItem);
+    if (d.editItem && t) return openItem(t, null, t.items.find(i => i.id === d.editItem));
+    switch (d.act) {
+      case 'new': return openTrip();
+      case 'past': ui.showPast = !ui.showPast; return render();
+      case 'back': ui.view = 'list'; return render();
+      case 'edit-trip': return t && openTrip(t);
+      case 'ics-trip': return t && saveFile(`${t.dest}-${t.start}.ics`, ics([t]), 'text/calendar');
+      case 'del-trip': if (t && armed(el, '再点一次确认删除')) { ui.view = 'list'; await store.remove(t.id); toast('已删除'); } return;
+    }
+  });
+  app.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-day]')) { e.preventDefault(); e.target.click(); } });
+
+  let toastTimer;
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
+
+  // ---------- boot ----------
+  store.trips = store.loadLocal();
+  render();
+  store.connect();
+})();
+</script>
+<!-- APP:END -->
+</body>
+</html>
